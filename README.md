@@ -73,6 +73,44 @@ python ./tools/train.py --config-file ./configs/pcct_leg_unet2.py # for live leg
 python ./tools/train.py --config-file ./configs/pcct_diedmouse_unet2.py # for died mouse dataset
 ```
 
+### Train with your own 3D `.dm4` TEM data
+
+`PCCT` dataset loader now supports `.dm3/.dm4`, `.npy`, `.npz`, and `.mat` volumes.
+
+1. Install one DM reader (either one is enough):
+```shell
+pip install ncempy
+# or
+pip install hyperspy
+```
+
+2. Create a config copied from `configs/pcct_livemouse_unet2.py` and point `data_train.data_file` to your file:
+```python
+data_train = dict(
+    type="pcct",
+    data_file='datasets/my_tem/volume.dm4',
+    crop_size=128,
+    hu_range=[0, 1.5],
+    slice_crop=[0, 200],
+    neighbor=2,
+    target_type='noise-sim',
+    random_flip=True,
+    ims_per_batch=8,
+    shuffle=True,
+    train=True,
+)
+```
+
+3. Start training:
+```shell
+python ./scripts/train.py --config-file ./configs/pcct_dm4_unet2.py
+```
+
+Data shape notes:
+- 3D input is interpreted as `[slice, height, width]` and converted internally.
+- 4D input should be `[height, width, slice, channel]`.
+- For `.npz`, use `data_key='your_key'` in `data_train` if the array key is not `data`.
+
 ### Natural Images
 
 Download BSD68 test dataset at [here](https://drive.google.com/drive/folders/1b_RvBwIr9yLg8yPWb0BHYmWiOEVUvG4K?usp=sharing),
