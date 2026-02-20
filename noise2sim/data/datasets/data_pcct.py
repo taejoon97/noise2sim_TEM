@@ -4,6 +4,7 @@ import torch
 import random
 import torch.nn.functional as F
 from scipy.io import loadmat
+from pathlib import Path
 
 
 def random_rotate_mirror(img_0, random_mode):
@@ -37,22 +38,91 @@ def read_mat(fpath):
     return data
 
 
+def _read_dm4_with_ncempy(fpath):
+    try:
+        from ncempy.io import dm
+    except Exception:
+        return None
+
+    try:
+        data_dict = dm.dmReader(fpath)
+        return data_dict['data']
+    except Exception:
+        return None
+
+
+def _read_dm4_with_hyperspy(fpath):
+    try:
+        import hyperspy.api as hs
+    except Exception:
+        return None
+
+    try:
+        signal = hs.load(fpath)
+        return signal.data
+    except Exception:
+        return None
+
+
+def read_volume(fpath, data_key='data'):
+    ext = Path(fpath).suffix.lower()
+
+    if ext == '.mat':
+        return read_mat(fpath)
+
+    if ext == '.npy':
+        return np.load(fpath)
+
+    if ext == '.npz':
+        data = np.load(fpath)
+        if data_key not in data.files:
+            raise KeyError("Key '{}' is not in {}. Available keys: {}".format(data_key, fpath, data.files))
+        return data[data_key]
+
+    if ext in ['.dm3', '.dm4']:
+        data = _read_dm4_with_ncempy(fpath)
+        if data is None:
+            data = _read_dm4_with_hyperspy(fpath)
+        if data is None:
+            raise ImportError(
+                "Unable to read DM file '{}'. Install one of: `pip install ncempy` or `pip install hyperspy`.".format(fpath)
+            )
+        return data
+
+    raise ValueError("Unsupported file format: {}".format(fpath))
+
+
+def _to_hwsc(data):
+    if data.ndim == 2:
+        return data[:, :, None, None]
+
+    if data.ndim == 3:
+        # Assume [S, H, W] for DM volumes and convert to [H, W, S, 1]
+        return np.transpose(data, [1, 2, 0])[:, :, :, None]
+
+    if data.ndim == 4:
+        # [H, W, S, C]
+        return data
+
+    raise ValueError("Expected 2D/3D/4D data, got shape {}".format(data.shape))
+
+
 class PCCT(data.Dataset):
     """
 
     """
 
     def __init__(self, data_file, crop_size, neighbor=2, center_crop=None, random_flip=False, target_type='noise-sim',
-                 hu_range=None, ks=7, th=None, slice_crop=None, data_file_clean=None, **kwargs):
+                 hu_range=None, ks=7, th=None, slice_crop=None, data_file_clean=None, data_key='data', **kwargs):
         if hu_range is None:
             hu_range = [0, 1.5]
         if slice_crop is None:
             slice_crop = [20, 100]
         self.crop_size = crop_size
         self.random_flip = random_flip
-        self.data = read_mat(data_file)
+        self.data = _to_hwsc(read_volume(data_file, data_key=data_key))
         if data_file_clean is not None:
-            self.data_clean = read_mat(data_file_clean)
+            self.data_clean = _to_hwsc(read_volume(data_file_clean, data_key=data_key))
         else:
             self.data_clean = None
 
