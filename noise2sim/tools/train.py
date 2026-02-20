@@ -75,6 +75,16 @@ def main(config_file):
     cfg.distributed = cfg.world_size > 1 or cfg.multiprocessing_distributed
 
     ngpus_per_node = torch.cuda.device_count()
+    if cfg.distributed and ngpus_per_node <= 1:
+        warnings.warn(
+            'Distributed launch requested but <=1 GPU detected. '
+            'Falling back to single-process training to avoid NCCL initialization failures.'
+        )
+        cfg.distributed = False
+        cfg.multiprocessing_distributed = False
+        if torch.cuda.is_available() and cfg.gpu is None:
+            cfg.gpu = 0
+
     if cfg.multiprocessing_distributed:
         # Since we have ngpus_per_node processes per node, the total world_size
         # needs to be adjusted accordingly
@@ -131,14 +141,11 @@ def main_worker(gpu, ngpus_per_node, cfg):
             # available GPUs if device_ids are not set
             model = torch.nn.parallel.DistributedDataParallel(model)
     elif cfg.gpu is not None:
+        # Single-GPU fallback path (non-DDP)
         torch.cuda.set_device(cfg.gpu)
         model = model.cuda(cfg.gpu)
-        # comment out the following line for debugging
-        raise NotImplementedError("Only DistributedDataParallel is supported.")
     else:
-        # AllGather implementation (batch shuffle, queue update, etc.) in
-        # this code only supports DistributedDataParallel.
-        raise NotImplementedError("Only DistributedDataParallel is supported.")
+        warnings.warn('Running on CPU because CUDA is unavailable or gpu is not set.')
 
     optimizer = make_optimizer(cfg, model)
     scheduler = None
