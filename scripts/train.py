@@ -1,7 +1,14 @@
 import argparse
 import os
+import sys
 from pathlib import Path
 import difflib
+
+# Prefer local repo package over any globally installed `noise2sim`
+REPO_ROOT = Path(__file__).resolve().parent.parent
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
 from noise2sim.tools.train import main
 # import os
 # os.environ["CUDA_VISIBLE_DEVICES"] = '0,1,2,3'
@@ -53,8 +60,16 @@ def _resolve_config_path(config_file):
     )
 
 
+
+
+def _debug_print_import_path():
+    if os.environ.get("NOISE2SIM_DEBUG_IMPORT", "0") == "1":
+        import noise2sim
+        print("[Debug] using noise2sim package at:", Path(noise2sim.__file__).resolve())
+
 def train():
     args = parser.parse_args()
+    _debug_print_import_path()
     config_file = _resolve_config_path(args.config_file)
     main(config_file)
 
